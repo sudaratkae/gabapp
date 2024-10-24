@@ -4,11 +4,14 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const secretKey = 'your_secret_key';
+const multer = require('multer');
+const os = require('os');
 
+const secretKey = 'your_secret_key';
 const app = express();
 const PORT = 3000;
 
+// Database connection
 const db = mysql.createConnection({
     host: 'dx9-0.h.filess.io',
     user: '1_programeye',
@@ -16,32 +19,42 @@ const db = mysql.createConnection({
     database: '1_programeye',
 });
 
+// Middleware setup
 app.use(cors());
 app.use(bodyParser.json());
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' }); // ระบุที่จัดเก็บไฟล์อัปโหลด
+const upload = multer({ dest: 'uploads/' }); // Specify upload directory
 
+// Function to get the local IP address
+function getLocalIp() {
+    const interfaces = os.networkInterfaces();
+    for (let interfaceName in interfaces) {
+        for (let iface of interfaces[interfaceName]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'IP address not found';
+}
+
+// Registration endpoint
 app.post('/register', upload.single('profile_image'), (req, res) => {
-    // ตรวจสอบข้อมูลที่ส่งมาทาง console
-    console.log(req.body); // ตรวจสอบข้อมูลที่ส่งมาจาก Flutter
-    console.log(req.file); // ตรวจสอบไฟล์ที่อัปโหลด
+    console.log(req.body); // Log request body
+    console.log(req.file); // Log uploaded file
 
     const { username, phone, address, password, type, vehicle_number } = req.body;
 
-    // ตรวจสอบว่ามีข้อมูลที่จำเป็นทั้งหมดหรือไม่
     if (!username || !phone || !address || !password) {
         return res.status(400).json({ message: 'All fields are required.' });
     }
 
-    // คุณสามารถจัดการการบันทึกรูปภาพได้ที่นี่
-    const profileImage = req.file ? req.file.filename : null; // ชื่อไฟล์ที่อัปโหลด
+    const profileImage = req.file ? req.file.filename : null; // Uploaded file name
 
-    // ตรวจสอบว่าโปรไฟล์อิมเมจถูกส่ง
     if (!profileImage) {
         return res.status(400).json({ message: 'Profile image is required.' });
     }
 
-    // เข้ารหัสรหัสผ่าน
+    // Hash the password
     bcrypt.hash(password, 10, (err, hashedPassword) => {
         if (err) {
             console.error('Hashing error:', err);
@@ -59,6 +72,7 @@ app.post('/register', upload.single('profile_image'), (req, res) => {
     });
 });
 
+// Login endpoint
 app.post('/rider/login', (req, res) => {
     const { username, password } = req.body;
 
@@ -66,7 +80,6 @@ app.post('/rider/login', (req, res) => {
         return res.status(400).json({ message: 'Username and password are required.' });
     }
 
-    // ใช้ db แทน pool ที่นี่
     db.query('SELECT * FROM user WHERE username = ?', [username], (err, results) => {
         if (err) {
             console.error('Query error:', err);
@@ -97,6 +110,8 @@ app.post('/rider/login', (req, res) => {
         });
     });
 });
+
+// Shipments endpoint
 app.get('/shipments', (req, res) => {
     const query = `
       SELECT s.shipment_id, u.username, u.phone, u.address, s.shipment_status 
@@ -105,13 +120,15 @@ app.get('/shipments', (req, res) => {
     `;
     db.query(query, (err, results) => {
         if (err) {
-            console.error('Error executing query:', err); // Log error to console
+            console.error('Error executing query:', err);
             return res.status(500).json({ error: 'Internal Server Error', details: err });
         }
         res.json(results);
     });
 });
 
+// Start server
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    const ipAddress = getLocalIp();
+    console.log(`Server running on http://${ipAddress}:${PORT}`);
 });
